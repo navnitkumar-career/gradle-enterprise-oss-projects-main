@@ -1,0 +1,94 @@
+name: Kotlin
+
+on:
+  schedule:
+    # Every Sunday at 9.00am
+    - cron: "0 9 * * 0"
+
+  workflow_dispatch:
+
+env:
+  GRADLE_ENTERPRISE_URL: "https://ge.solutions-team.gradle.com"
+  GIT_REPO: "https://github.com/JetBrains/kotlin"
+  TASKS: "install"
+  ARGS: "-Pkotlin.test.maxParallelForks=4 -Dorg.gradle.dependency.verification=off"
+
+jobs:
+  Experiment:
+
+    strategy:
+      matrix:
+        include:
+          - experimentId: 1
+          - experimentId: 2
+          - experimentId: 3
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up JDK 6
+        uses: actions/setup-java@v3
+        with:
+          java-version: 6
+          distribution: "zulu"
+      - name: Set up JDK 7
+        uses: actions/setup-java@v3
+        with:
+          java-version: 7
+          distribution: "zulu"
+      - name: Set up JDK 9
+        uses: actions/setup-java@v3
+        with:
+          java-version: 9
+          distribution: "zulu"
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: 11
+          distribution: "temurin"
+      - name: Display toolchain
+        run: |
+          touch settings.gradle
+          gradle -q javaToolchains ${{ env.ARGS }}
+        shell: bash
+      - name: Add git hook to temporarily disable caching for kotlin-dom-api-compat:compileKotlinJs (KT-56690)
+        run: |
+          mkdir ~/git-hooks
+          echo -e 'echo "\ntasks.withType<org.jetbrains.kotlin.gradle.tasks.Kotlin2JsCompile>().configureEach { outputs.doNotCacheIf(\"https://youtrack.jetbrains.com/issue/KT-56690\") { true } }" >> libraries/kotlin-dom-api-compat/build.gradle.kts\n' > ~/git-hooks/post-checkout
+          chmod +x ~/git-hooks/post-checkout
+          git config --global core.hooksPath ~/git-hooks
+      - name: Download latest version of the validation scripts
+        uses: gradle/gradle-enterprise-build-validation-scripts/.github/actions/gradle/download@actions-stable
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run experiment 1
+        uses: gradle/gradle-enterprise-build-validation-scripts/.github/actions/gradle/experiment-1@actions-stable
+        env:
+          GRADLE_ENTERPRISE_ACCESS_KEY: "${{ secrets.GE_SOLUTIONS_ACCESS_TOKEN }}"
+        with:
+          gitRepo: ${{ env.GIT_REPO }}
+          tasks: ${{ env.TASKS }}
+          args: ${{ env.ARGS }}
+          gradleEnterpriseUrl: ${{ env.GRADLE_ENTERPRISE_URL }}
+        if: matrix.experimentId == 1
+      - name: Run experiment 2
+        uses: gradle/gradle-enterprise-build-validation-scripts/.github/actions/gradle/experiment-2@actions-stable
+        env:
+          GRADLE_ENTERPRISE_ACCESS_KEY: "${{ secrets.GE_SOLUTIONS_ACCESS_TOKEN }}"
+        with:
+          gitRepo: ${{ env.GIT_REPO }}
+          tasks: ${{ env.TASKS }}
+          args: ${{ env.ARGS }}
+          gradleEnterpriseUrl: ${{ env.GRADLE_ENTERPRISE_URL }}
+          failIfNotFullyCacheable: true
+        if: matrix.experimentId == 2
+      - name: Run experiment 3
+        uses: gradle/gradle-enterprise-build-validation-scripts/.github/actions/gradle/experiment-3@actions-stable
+        env:
+          GRADLE_ENTERPRISE_ACCESS_KEY: "${{ secrets.GE_SOLUTIONS_ACCESS_TOKEN }}"
+        with:
+          gitRepo: ${{ env.GIT_REPO }}
+          tasks: ${{ env.TASKS }}
+          args: ${{ env.ARGS }}
+          gradleEnterpriseUrl: ${{ env.GRADLE_ENTERPRISE_URL }}
+          failIfNotFullyCacheable: true
+        if: matrix.experimentId == 3
